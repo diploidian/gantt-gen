@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WBS Gantt Chart Editor</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --primary-hover: #1d4ed8;
+            --success-color: #10b981;
+            --success-hover: #059669;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --border-color: #cbd5e1;
+            --bg-light: #f8fafc;
+            --text-main: #0f172a;
+            --bar-color: #3b82f6;
+            --milestone-color: #ef4444;
+            --row-height: 28px; /* Compressed row height */
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            margin: 20px;
+            background-color: #ffffff;
+            color: var(--text-main);
+            font-size: 13px;
+        }
+
+        /* Drag and Drop Overlay */
+        #drop-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(37, 99, 235, 0.05);
+            border: 4px dashed var(--primary-color);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--primary-color);
+            pointer-events: none;
+        }
+        body.dragover #drop-overlay { display: flex; }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            padding: 12px;
+            background: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            align-items: center;
+        }
+
+        button {
+            cursor: pointer;
+            padding: 6px 14px;
+            border: none;
+            border-radius: 4px;
+            font-weight: 600;
+            font-size: 13px;
+            transition: opacity 0.2s;
+            display: inline-flex;
+            align-items: center;
+            height: 32px;
+        }
+        button:hover { opacity: 0.9; }
+        
+        .btn-add { background-color: var(--success-color); color: white; }
+        .btn-print { background-color: #475569; color: white; }
+        .btn-export { background-color: var(--warning-color); color: white; }
+        .btn-import { background-color: var(--primary-color); color: white; }
+
+        .chart-container {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: white;
+            overflow-x: auto;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .gantt-wrapper {
+            min-width: 1200px;
+            padding: 15px 20px 20px 20px;
+        }
+
+        .timeline-header {
+            display: flex;
+            margin-left: 400px;
+            border-bottom: 2px solid var(--text-main);
+            position: relative;
+            height: 24px;
+        }
+
+        .timeline-header-cell {
+            position: absolute;
+            transform: translateX(-50%);
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            bottom: 4px;
+        }
+
+        .gantt-row {
+            display: flex;
+            align-items: stretch;
+            height: var(--row-height);
+            border-bottom: 1px dashed var(--border-color);
+            box-sizing: border-box;
+        }
+        
+        .gantt-row:hover { background-color: #f8fafc; }
+
+        .gantt-labels {
+            width: 400px;
+            min-width: 400px;
+            display: flex;
+            align-items: center;
+            font-size: 12px;
+            padding-right: 10px;
+            border-right: 2px solid var(--text-main);
+            background: inherit;
+        }
+
+        .label-wbs { width: 45px; font-weight: bold; color: #0f172a; padding-left: 5px; }
+        .label-title { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
+        .label-owner { width: 90px; color: #475569; font-size: 11px; text-align: right; }
+        
+        /* Indentation for Sub-tasks */
+        .indent-text { padding-left: 20px !important; color: #334155; font-weight: normal; }
+
+        .gantt-timeline {
+            position: relative;
+            flex-grow: 1;
+            background-size: calc(100% / 65) 100%;
+            background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px);
+        }
+
+        /* Full height bars */
+        .gantt-bar {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            background-color: var(--bar-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 11px;
+            font-weight: 600;
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .gantt-milestone {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%) rotate(45deg);
+            width: 14px;
+            height: 14px;
+            background-color: var(--milestone-color);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 2px 6px;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--row-height);
+        }
+
+        th { 
+            background-color: var(--bg-light);
+            font-weight: 600;
+            color: #334155;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            padding: 6px;
+        }
+
+        input[type="text"], input[type="number"] {
+            width: 95%;
+            padding: 2px 4px;
+            border: 1px solid transparent;
+            border-radius: 2px;
+            font-family: inherit;
+            font-size: 12px;
+            background: transparent;
+        }
+        
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            background: #fff;
+            box-shadow: inset 0 0 0 1px var(--primary-color);
+        }
+        
+        tr:hover input { background: #fff; border-color: #cbd5e1; }
+        input[type="number"] { width: 50px; text-align: center; }
+
+        /* Actions Column Fix */
+        .actions-cell {
+            display: flex;
+            gap: 2px;
+            align-items: center;
+            justify-content: flex-start;
+            height: 100%;
+        }
+
+        .btn-icon { 
+            padding: 0; 
+            width: 22px;
+            height: 22px;
+            font-size: 12px; 
+            border-radius: 3px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #e2e8f0; 
+            color: #334155;
+            flex-shrink: 0;
+        }
+        .btn-icon:hover { background-color: #cbd5e1; }
+        .btn-delete { background-color: #fee2e2; color: #dc2626; }
+        .btn-delete:hover { background-color: #fecaca; }
+
+        /* Section Breakline */
+        .section-break {
+            border-top: 2px solid #64748b !important;
+        }
+
+        /* --- PDF PRINT STYLES --- */
+        @media print {
+            @page { size: landscape; margin: 0.5cm; }
+            body { margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            .controls, .table-container, #drop-overlay { display: none !important; }
+            .chart-container { border: none !important; overflow: visible !important; padding: 0 !important; box-shadow: none !important; margin: 0 !important; }
+            .gantt-wrapper { min-width: 100% !important; padding: 0; }
+            .gantt-row { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="drop-overlay">Drop CSV File Here to Import</div>
+
+<div class="controls">
+    <button class="btn-add" onclick="addTaskToEnd()">+ Add Task</button>
+    
+    <div style="flex-grow: 1;"></div>
+    
+    <input type="file" id="csv-file" accept=".csv" style="display: none;" onchange="handleFileUpload(event)">
+    <button class="btn-import" onclick="document.getElementById('csv-file').click()">
+        Import CSV (Drag & Drop)
+    </button>
+    <button class="btn-export" onclick="exportCSV()">Export CSV</button>
+    <button class="btn-print" onclick="window.print()">Print PDF</button>
+</div>
+
+<!-- Chart is now Above the Table -->
+<div class="chart-container">
+    <div class="gantt-wrapper">
+        <div id="timeline-header" class="timeline-header"></div>
+        <div id="chart-body"></div>
+    </div>
+</div>
+
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 8%">WBS</th>
+                <th style="width: 42%">Task Title</th>
+                <th style="width: 15%">Owner</th>
+                <th style="width: 10%">Start</th>
+                <th style="width: 10%">Duration</th>
+                <th style="width: 15%">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="table-body">
+            <!-- Rows injected by JavaScript -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const MAX_WEEKS = 65;
+
+    // Start with a blank slate
+    let tasks = [];
+
+    // Drag and Drop Event Listeners
+    const dropZone = document.body;
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        document.body.classList.add('dragover');
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        // Prevent flickering when dragging over child elements
+        if (e.clientX === 0 || e.clientY === 0) { 
+            document.body.classList.remove('dragover');
+        }
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        document.body.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            const file = e.dataTransfer.files[0];
+            if (file.name.endsWith('.csv')) {
+                parseFile(file);
+            } else {
+                alert("Please drop a valid .csv file.");
+            }
+        }
+    });
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (file) parseFile(file);
+        event.target.value = ''; // Reset input
+    }
+
+    function parseFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return; // Need headers + data
+            
+            let newTasks = [];
+            for (let i = 1; i < lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                
+                // Parse CSV respecting quotes
+                const row = parseCSVRow(lines[i]);
+                
+                if (row.length >= 5) {
+                    newTasks.push({
+                        wbs: row[0].trim(),
+                        title: row[1].trim(),
+                        owner: row[2].trim(),
+                        start: parseInt(row[3], 10) || 1,
+                        duration: parseInt(row[4], 10) || 0
+                    });
+                }
+            }
+            if(newTasks.length > 0) {
+                tasks = newTasks;
+                renderAll();
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function parseCSVRow(str) {
+        let result = [];
+        let inQuotes = false;
+        let current = "";
+        for (let i = 0; i < str.length; i++) {
+            let char = str[i];
+            if (char === '"' && str[i+1] === '"') {
+                current += '"';
+                i++;
+            } else if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = "";
+            } else {
+                current += char;
+            }
+        }
+        result.push(current);
+        return result.map(s => s.replace(/^"|"$/g, '')); // Strip surrounding quotes
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+        
+        let prevWbsInt = null;
+
+        tasks.forEach((task, index) => {
+            const tr = document.createElement('tr');
+            
+            // Logic for section breaklines
+            const currentWbsInt = parseInt(task.wbs.split('.')[0]);
+            if (!isNaN(currentWbsInt) && prevWbsInt !== null && currentWbsInt !== prevWbsInt) {
+                tr.classList.add('section-break');
+            }
+            if (!isNaN(currentWbsInt)) prevWbsInt = currentWbsInt;
+
+            // Logic for sub-section indentation
+            const isSub = task.wbs.includes('.') && !task.wbs.endsWith('.0');
+            const titleClass = isSub ? 'indent-text' : '';
+
+            tr.innerHTML = `
+                <td><input type="text" value="${task.wbs}" onchange="updateTask(${index}, 'wbs', this.value); renderTable();"></td>
+                <td><input type="text" value="${task.title}" class="${titleClass}" oninput="updateTask(${index}, 'title', this.value)"></td>
+                <td><input type="text" value="${task.owner}" oninput="updateTask(${index}, 'owner', this.value)"></td>
+                <td><input type="number" min="1" max="100" value="${task.start}" oninput="updateTask(${index}, 'start', parseInt(this.value) || 1)"></td>
+                <td><input type="number" min="0" max="100" value="${task.duration}" oninput="updateTask(${index}, 'duration', parseInt(this.value) || 0)"></td>
+                <td class="actions-cell">
+                    <button class="btn-icon" onclick="insertTask(${index})" title="Insert Above">↑</button>
+                    <button class="btn-icon" onclick="insertTask(${index + 1})" title="Insert Below">↓</button>
+                    <button class="btn-icon btn-delete" onclick="deleteTask(${index})" title="Delete Row">✕</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderChart() {
+        const header = document.getElementById('timeline-header');
+        const chartBody = document.getElementById('chart-body');
+        
+        header.innerHTML = '';
+        chartBody.innerHTML = '';
+
+        // Build X-Axis Labels (01, 02, 03...)
+        for (let i = 1; i <= MAX_WEEKS; i += 2) { 
+            const percentage = ((i - 1) / MAX_WEEKS) * 100;
+            const cell = document.createElement('div');
+            cell.className = 'timeline-header-cell';
+            cell.style.left = `${percentage}%`;
+            // Add leading zero if single digit
+            cell.innerText = i < 10 ? `0${i}` : `${i}`;
+            header.appendChild(cell);
+        }
+
+        let prevWbsInt = null;
+
+        // Build Gantt Rows and Bars
+        tasks.forEach(task => {
+            const row = document.createElement('div');
+            row.className = 'gantt-row';
+
+            // Breakline Logic
+            const currentWbsInt = parseInt(task.wbs.split('.')[0]);
+            if (!isNaN(currentWbsInt) && prevWbsInt !== null && currentWbsInt !== prevWbsInt) {
+                row.classList.add('section-break');
+            }
+            if (!isNaN(currentWbsInt)) prevWbsInt = currentWbsInt;
+            
+            // Sub-section Logic
+            const isSub = task.wbs.includes('.') && !task.wbs.endsWith('.0');
+            const titleClass = isSub ? 'indent-text' : '';
+
+            // Left side labels
+            const labels = document.createElement('div');
+            labels.className = 'gantt-labels';
+            labels.innerHTML = `
+                <div class="label-wbs">${task.wbs}</div>
+                <div class="label-title ${titleClass}" title="${task.title}">${task.title}</div>
+                <div class="label-owner">${task.owner}</div>
+            `;
+            row.appendChild(labels);
+
+            // Right side timeline and bar
+            const timeline = document.createElement('div');
+            timeline.className = 'gantt-timeline';
+
+            const startPercent = ((task.start - 1) / MAX_WEEKS) * 100;
+            
+            if (task.duration === 0) {
+                const milestone = document.createElement('div');
+                milestone.className = 'gantt-milestone';
+                milestone.style.left = `${startPercent}%`;
+                timeline.appendChild(milestone);
+            } else {
+                const widthPercent = (task.duration / MAX_WEEKS) * 100;
+                const bar = document.createElement('div');
+                bar.className = 'gantt-bar';
+                bar.style.left = `${startPercent}%`;
+                bar.style.width = `${widthPercent}%`;
+                if (task.duration >= 2) bar.innerText = `${task.duration}`; 
+                timeline.appendChild(bar);
+            }
+
+            row.appendChild(timeline);
+            chartBody.appendChild(row);
+        });
+    }
+
+    function renderAll() {
+        renderTable();
+        renderChart();
+    }
+
+    function updateTask(index, field, value) {
+        tasks[index][field] = value;
+        renderChart(); 
+    }
+
+    function addTaskToEnd() {
+        let maxStart = 1;
+        if(tasks.length > 0) {
+            const lastTask = tasks[tasks.length - 1];
+            maxStart = lastTask.start + lastTask.duration;
+        }
+        tasks.push({ wbs: '', title: '', owner: '', start: maxStart, duration: 2 });
+        renderAll();
+        window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    function insertTask(index) {
+        let newStart = 1;
+        if (tasks[index]) {
+            newStart = tasks[index].start;
+        } else if (index > 0 && tasks[index - 1]) {
+            newStart = tasks[index - 1].start + tasks[index - 1].duration;
+        }
+        tasks.splice(index, 0, { wbs: '', title: '', owner: '', start: newStart, duration: 2 });
+        renderAll();
+    }
+
+    function deleteTask(index) {
+        tasks.splice(index, 1);
+        renderAll();
+    }
+
+    function exportCSV() {
+        if(tasks.length === 0) {
+            alert("No data to export!");
+            return;
+        }
+
+        const headers = ['WBS', 'Task Title', 'Owner', 'Start (Week)', 'Duration (Weeks)', 'End (Week)'];
+        
+        const csvRows = tasks.map(t => {
+            const endWeek = t.start + t.duration;
+            return [
+                `"${(t.wbs || '').toString().replace(/"/g, '""')}"`,
+                `"${(t.title || '').toString().replace(/"/g, '""')}"`,
+                `"${(t.owner || '').toString().replace(/"/g, '""')}"`,
+                t.start,
+                t.duration,
+                endWeek
+            ].join(',');
+        });
+        
+        const csvContent = [headers.join(','), ...csvRows].join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        
+        if (navigator.msSaveBlob) { 
+            navigator.msSaveBlob(blob, 'wbs_schedule.csv');
+        } else {
+            link.href = URL.createObjectURL(blob);
+            link.download = 'wbs_schedule.csv';
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    // Execute on initial load (will be empty)
+    renderAll();
+</script>
+
+</body>
+</html>
