@@ -3,97 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WBS Gantt Chart Editor</title>
+    <title>Project Schedule Editor</title>
     <style>
         :root {
             --primary-color: #2563eb;
-            --primary-hover: #1d4ed8;
-            --success-color: #10b981;
-            --success-hover: #059669;
-            --warning-color: #f59e0b;
-            --danger-color: #ef4444;
-            --danger-hover: #dc2626;
             --border-color: #cbd5e1;
             --bg-light: #f8fafc;
             --text-main: #0f172a;
             --bar-color: #3b82f6;
             --milestone-color: #ef4444;
-            --row-height: 28px; /* Compressed row height */
         }
 
         body {
             font-family: system-ui, -apple-system, sans-serif;
-            margin: 20px;
+            margin: 10px 20px;
             background-color: #ffffff;
             color: var(--text-main);
-            font-size: 13px;
+            font-size: 12px;
         }
-
-        /* Drag and Drop Overlay */
-        #drop-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(37, 99, 235, 0.05);
-            border: 4px dashed var(--primary-color);
-            z-index: 9999;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--primary-color);
-            pointer-events: none;
-        }
-        body.dragover #drop-overlay { display: flex; }
 
         .controls {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             display: flex;
             gap: 10px;
-            flex-wrap: wrap;
-            padding: 12px;
-            background: var(--bg-light);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
             align-items: center;
         }
 
         button {
             cursor: pointer;
-            padding: 6px 14px;
+            padding: 6px 12px;
             border: none;
             border-radius: 4px;
             font-weight: 600;
             font-size: 13px;
-            transition: opacity 0.2s;
-            display: inline-flex;
-            align-items: center;
-            height: 32px;
         }
-        button:hover { opacity: 0.9; }
+
+        .btn-import { background-color: #64748b; color: white; }
+        .btn-export { background-color: #10b981; color: white; }
+        .btn-print { background-color: var(--primary-color); color: white; }
         
-        .btn-add { background-color: var(--success-color); color: white; }
-        .btn-print { background-color: #475569; color: white; }
-        .btn-export { background-color: var(--warning-color); color: white; }
-        .btn-import { background-color: var(--primary-color); color: white; }
+        #drop-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
 
         .chart-container {
             border: 1px solid var(--border-color);
             border-radius: 8px;
             background: white;
             overflow-x: auto;
-            margin-bottom: 20px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
         }
 
         .gantt-wrapper {
-            min-width: 1200px;
-            padding: 15px 20px 20px 20px;
+            min-width: 1000px;
+            padding: 10px 10px;
         }
 
         .timeline-header {
             display: flex;
-            margin-left: 400px;
+            margin-left: 350px; 
             border-bottom: 2px solid var(--text-main);
             position: relative;
             height: 24px;
@@ -103,78 +80,82 @@
             position: absolute;
             transform: translateX(-50%);
             font-size: 11px;
-            font-weight: 700;
-            color: #475569;
-            bottom: 4px;
+            font-weight: bold;
+            bottom: 2px;
+            transition: transform 0.2s ease;
+        }
+
+        .timeline-header-cell.vertical-text {
+            transform: translateX(-50%) rotate(-90deg);
+            bottom: 6px;
         }
 
         .gantt-row {
             display: flex;
             align-items: stretch;
-            height: var(--row-height);
-            border-bottom: 1px dashed var(--border-color);
-            box-sizing: border-box;
+            height: 20px; 
+            border-bottom: 1px dashed #e2e8f0;
         }
-        
-        .gantt-row:hover { background-color: #f8fafc; }
+
+        .gantt-row.major-section {
+            border-top: 2px solid #64748b;
+            margin-top: 2px;
+        }
 
         .gantt-labels {
-            width: 400px;
-            min-width: 400px;
+            width: 350px;
+            min-width: 350px;
             display: flex;
             align-items: center;
-            font-size: 12px;
-            padding-right: 10px;
+            font-size: 11px;
+            padding-right: 5px;
             border-right: 2px solid var(--text-main);
-            background: inherit;
+            background: #ffffff;
         }
 
-        .label-wbs { width: 45px; font-weight: bold; color: #0f172a; padding-left: 5px; }
-        .label-title { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 10px; }
-        .label-owner { width: 90px; color: #475569; font-size: 11px; text-align: right; }
+        .label-wbs { width: 35px; font-weight: bold; }
+        .label-title { flex-grow: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px; }
+        .label-owner { width: 90px; color: #475569; text-align: right; overflow: hidden; white-space: nowrap;}
         
-        /* Indentation for Sub-tasks */
-        .indent-text { padding-left: 20px !important; color: #334155; font-weight: normal; }
+        .indented-title { padding-left: 15px !important; }
 
         .gantt-timeline {
             position: relative;
             flex-grow: 1;
-            background-size: calc(100% / 65) 100%;
-            background-image: linear-gradient(to right, #e2e8f0 1px, transparent 1px);
+            background-image: linear-gradient(to right, #f1f5f9 1px, transparent 1px);
         }
 
-        /* Full height bars */
         .gantt-bar {
             position: absolute;
             top: 0;
-            height: 100%;
+            height: 100%; 
             background-color: var(--bar-color);
+            border-radius: 0; 
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 10px;
+            font-weight: bold;
             overflow: hidden;
             white-space: nowrap;
         }
 
         .gantt-milestone {
             position: absolute;
-            top: 50%;
-            transform: translate(-50%, -50%) rotate(45deg);
+            top: 3px;
             width: 14px;
             height: 14px;
             background-color: var(--milestone-color);
-            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+            transform: rotate(45deg) translateX(-50%);
         }
 
         .table-container {
             overflow-x: auto;
             border: 1px solid var(--border-color);
             border-radius: 8px;
-            background: #ffffff;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            padding: 10px;
+            background: var(--bg-light);
         }
 
         table {
@@ -184,78 +165,137 @@
         }
 
         th, td {
-            padding: 2px 6px;
+            padding: 3px 4px; 
             border-bottom: 1px solid var(--border-color);
-            height: var(--row-height);
+            vertical-align: middle;
         }
 
-        th { 
-            background-color: var(--bg-light);
-            font-weight: 600;
-            color: #334155;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            padding: 6px;
-        }
+        th { background-color: #e2e8f0; font-size: 11px;}
 
         input[type="text"], input[type="number"] {
             width: 95%;
-            padding: 2px 4px;
-            border: 1px solid transparent;
-            border-radius: 2px;
-            font-family: inherit;
-            font-size: 12px;
-            background: transparent;
-        }
-        
-        input[type="text"]:focus, input[type="number"]:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            background: #fff;
-            box-shadow: inset 0 0 0 1px var(--primary-color);
-        }
-        
-        tr:hover input { background: #fff; border-color: #cbd5e1; }
-        input[type="number"] { width: 50px; text-align: center; }
-
-        /* Actions Column Fix */
-        .actions-cell {
-            display: flex;
-            gap: 2px;
-            align-items: center;
-            justify-content: flex-start;
-            height: 100%;
-        }
-
-        .btn-icon { 
-            padding: 0; 
-            width: 22px;
-            height: 22px;
-            font-size: 12px; 
+            padding: 3px 5px;
+            border: 1px solid #94a3b8;
             border-radius: 3px;
+            font-size: 11px;
+            height: 16px;
+        }
+
+        input[type="number"] { width: 60px; }
+
+        .actions-cell {
+            white-space: nowrap;
+            min-width: 100px;
+        }
+
+        /* Uniformly sized action buttons to preserve row height */
+        .actions-cell button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background-color: #e2e8f0; 
-            color: #334155;
-            flex-shrink: 0;
-        }
-        .btn-icon:hover { background-color: #cbd5e1; }
-        .btn-delete { background-color: #fee2e2; color: #dc2626; }
-        .btn-delete:hover { background-color: #fecaca; }
-
-        /* Section Breakline */
-        .section-break {
-            border-top: 2px solid #64748b !important;
+            height: 20px;
+            width: 20px;
+            padding: 0;
+            margin: 0 1px;
+            border-radius: 3px;
+            font-size: 12px;
+            border: none;
+            cursor: pointer;
+            vertical-align: middle;
         }
 
-        /* --- PDF PRINT STYLES --- */
+        .btn-add-inline { background-color: #10b981; color: white; font-weight: bold; font-size: 14px;}
+        .btn-action { background-color: #e2e8f0; color: #333; }
+        .btn-delete { background-color: #ef4444; color: white; }
+
+        .popup-menu {
+            display: none;
+            position: absolute;
+            background: white;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            border-radius: 6px;
+            z-index: 1000;
+            min-width: 160px;
+            overflow: hidden;
+            font-size: 12px;
+        }
+
+        .popup-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            color: var(--text-main);
+            transition: background 0.1s;
+        }
+
+        .popup-item:hover {
+            background-color: #f1f5f9;
+            color: var(--primary-color);
+        }
+
+        /* NEW PROGRESS TRACKING STYLES */
+        .status-bar {
+            margin: 15px 0;
+            padding: 10px 15px;
+            background-color: #f1f5f9;
+            border-left: 4px solid var(--primary-color);
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .chart-relative-wrapper {
+            position: relative;
+        }
+
+        .timeline-marker {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            z-index: 10;
+        }
+
+        .marker-today {
+            background-color: #10b981;
+            pointer-events: none;
+            display: none; /* Hidden until date is set */
+        }
+
+        .marker-today::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -5px;
+            width: 12px;
+            height: 12px;
+            background-color: #10b981;
+            border-radius: 50%;
+        }
+
+        .marker-progress {
+            background-color: #eab308;
+            cursor: ew-resize;
+            display: none; /* Hidden until date is set */
+        }
+
+        .marker-progress::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -6px;
+            width: 0;
+            height: 0;
+            border-left: 7px solid transparent;
+            border-right: 7px solid transparent;
+            border-top: 12px solid #eab308;
+        }
+
         @media print {
             @page { size: landscape; margin: 0.5cm; }
             body { margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .controls, .table-container, #drop-overlay { display: none !important; }
-            .chart-container { border: none !important; overflow: visible !important; padding: 0 !important; box-shadow: none !important; margin: 0 !important; }
+            .controls, .table-container, .popup-menu { display: none !important; }
+            .chart-container { border: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
             .gantt-wrapper { min-width: 100% !important; padding: 0; }
             .gantt-row { page-break-inside: avoid; }
         }
@@ -266,172 +306,76 @@
 <div id="drop-overlay">Drop CSV File Here to Import</div>
 
 <div class="controls">
-    <button class="btn-add" onclick="addTaskToEnd()">+ Add Task</button>
-    
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <label for="start-date" style="font-weight: bold; font-size: 14px;">Set Start Date:</label>
+        <input type="date" id="start-date" onchange="handleStartDateChange()" style="padding: 4px; border: 1px solid #cbd5e1; border-radius: 4px;">
+    </div>
     <div style="flex-grow: 1;"></div>
-    
     <input type="file" id="csv-file" accept=".csv" style="display: none;" onchange="handleFileUpload(event)">
-    <button class="btn-import" onclick="document.getElementById('csv-file').click()">
-        Import CSV (Drag & Drop)
-    </button>
-    <button class="btn-export" onclick="exportCSV()">Export CSV</button>
-    <button class="btn-print" onclick="window.print()">Print PDF</button>
+    <button class="btn-import" onclick="document.getElementById('csv-file').click()">Import CSV</button>
+    <button class="btn-export" onclick="exportCSV()">Export to CSV</button>
+    <button class="btn-print" onclick="window.print()">Print to PDF</button>
 </div>
 
-<!-- Chart is now Above the Table -->
+<!-- Gantt Chart Top -->
 <div class="chart-container">
-    <div class="gantt-wrapper">
+    <div class="gantt-wrapper chart-relative-wrapper" id="gantt-wrapper">
+        <!-- New Progress Markers -->
+        <div id="marker-today" class="timeline-marker marker-today"></div>
+        <div id="marker-progress" class="timeline-marker marker-progress" onmousedown="startDrag(event)"></div>
+        
         <div id="timeline-header" class="timeline-header"></div>
         <div id="chart-body"></div>
     </div>
 </div>
 
+<!-- New Status Bar -->
+<div id="status-bar" class="status-bar">
+    Status: Awaiting project start date to enable progress tracking.
+</div>
+
+<!-- Table Bottom -->
 <div class="table-container">
     <table>
         <thead>
             <tr>
-                <th style="width: 8%">WBS</th>
-                <th style="width: 42%">Task Title</th>
-                <th style="width: 15%">Owner</th>
-                <th style="width: 10%">Start</th>
-                <th style="width: 10%">Duration</th>
-                <th style="width: 15%">Actions</th>
+                <th>Task No.</th>
+                <th>Task Title</th>
+                <th>Owner</th>
+                <th>Start</th>
+                <th>Duration</th>
+                <th>Actions</th>
             </tr>
         </thead>
-        <tbody id="table-body">
-            <!-- Rows injected by JavaScript -->
-        </tbody>
+        <tbody id="table-body"></tbody>
     </table>
 </div>
 
+<!-- Context Menu for Row Insertion -->
+<div id="popup-menu" class="popup-menu">
+    <div class="popup-item" onclick="executeAdd('above')" id="menu-above">Add row above</div>
+    <div class="popup-item" onclick="executeAdd('below')" id="menu-below">Add row below</div>
+</div>
+
 <script>
-    const MAX_WEEKS = 65;
+    let tasks = [
+        { wbs: '1.0', title: 'Task Title', owner: 'Responsible Party', start: 1, duration: 2 }
+    ];
 
-    // Start with a blank slate
-    let tasks = [];
+    let activeRowIndex = -1; // Stores which row was targeted by the popup menu
+    
+    // NEW TRACKING VARIABLES
+    let projectStartDate = null;
+    let isDraggingProgress = false;
+    let progressWeek = 1;
 
-    // Drag and Drop Event Listeners
-    const dropZone = document.body;
-    dropZone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        document.body.classList.add('dragover');
-    });
-
-    dropZone.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        // Prevent flickering when dragging over child elements
-        if (e.clientX === 0 || e.clientY === 0) { 
-            document.body.classList.remove('dragover');
-        }
-    });
-
-    dropZone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        document.body.classList.remove('dragover');
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            const file = e.dataTransfer.files[0];
-            if (file.name.endsWith('.csv')) {
-                parseFile(file);
-            } else {
-                alert("Please drop a valid .csv file.");
-            }
-        }
-    });
-
-    function handleFileUpload(event) {
-        const file = event.target.files[0];
-        if (file) parseFile(file);
-        event.target.value = ''; // Reset input
-    }
-
-    function parseFile(file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target.result;
-            const lines = text.trim().split('\n');
-            if (lines.length < 2) return; // Need headers + data
-            
-            let newTasks = [];
-            for (let i = 1; i < lines.length; i++) {
-                if(!lines[i].trim()) continue;
-                
-                // Parse CSV respecting quotes
-                const row = parseCSVRow(lines[i]);
-                
-                if (row.length >= 5) {
-                    newTasks.push({
-                        wbs: row[0].trim(),
-                        title: row[1].trim(),
-                        owner: row[2].trim(),
-                        start: parseInt(row[3], 10) || 1,
-                        duration: parseInt(row[4], 10) || 0
-                    });
-                }
-            }
-            if(newTasks.length > 0) {
-                tasks = newTasks;
-                renderAll();
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    function parseCSVRow(str) {
-        let result = [];
-        let inQuotes = false;
-        let current = "";
-        for (let i = 0; i < str.length; i++) {
-            let char = str[i];
-            if (char === '"' && str[i+1] === '"') {
-                current += '"';
-                i++;
-            } else if (char === '"') {
-                inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-                result.push(current);
-                current = "";
-            } else {
-                current += char;
-            }
-        }
-        result.push(current);
-        return result.map(s => s.replace(/^"|"$/g, '')); // Strip surrounding quotes
-    }
-
-    function renderTable() {
-        const tbody = document.getElementById('table-body');
-        tbody.innerHTML = '';
-        
-        let prevWbsInt = null;
-
-        tasks.forEach((task, index) => {
-            const tr = document.createElement('tr');
-            
-            // Logic for section breaklines
-            const currentWbsInt = parseInt(task.wbs.split('.')[0]);
-            if (!isNaN(currentWbsInt) && prevWbsInt !== null && currentWbsInt !== prevWbsInt) {
-                tr.classList.add('section-break');
-            }
-            if (!isNaN(currentWbsInt)) prevWbsInt = currentWbsInt;
-
-            // Logic for sub-section indentation
-            const isSub = task.wbs.includes('.') && !task.wbs.endsWith('.0');
-            const titleClass = isSub ? 'indent-text' : '';
-
-            tr.innerHTML = `
-                <td><input type="text" value="${task.wbs}" onchange="updateTask(${index}, 'wbs', this.value); renderTable();"></td>
-                <td><input type="text" value="${task.title}" class="${titleClass}" oninput="updateTask(${index}, 'title', this.value)"></td>
-                <td><input type="text" value="${task.owner}" oninput="updateTask(${index}, 'owner', this.value)"></td>
-                <td><input type="number" min="1" max="100" value="${task.start}" oninput="updateTask(${index}, 'start', parseInt(this.value) || 1)"></td>
-                <td><input type="number" min="0" max="100" value="${task.duration}" oninput="updateTask(${index}, 'duration', parseInt(this.value) || 0)"></td>
-                <td class="actions-cell">
-                    <button class="btn-icon" onclick="insertTask(${index})" title="Insert Above">↑</button>
-                    <button class="btn-icon" onclick="insertTask(${index + 1})" title="Insert Below">↓</button>
-                    <button class="btn-icon btn-delete" onclick="deleteTask(${index})" title="Delete Row">✕</button>
-                </td>
-            `;
-            tbody.appendChild(tr);
+    function getMaxWeeks() {
+        let max = 30; // Minimum default
+        tasks.forEach(t => {
+            const end = t.start + t.duration;
+            if (end > max) max = Math.ceil(end); 
         });
+        return max;
     }
 
     function renderChart() {
@@ -441,50 +385,71 @@
         header.innerHTML = '';
         chartBody.innerHTML = '';
 
-        // Build X-Axis Labels (01, 02, 03...)
-        for (let i = 1; i <= MAX_WEEKS; i += 2) { 
-            const percentage = ((i - 1) / MAX_WEEKS) * 100;
+        if (tasks.length === 0) return;
+
+        const currentMaxWeeks = getMaxWeeks();
+
+        // Calculate column width to determine if text should be vertical
+        let timelineWidth = header.clientWidth;
+        if (!timelineWidth) {
+            const wrapper = document.querySelector('.gantt-wrapper');
+            timelineWidth = Math.max(wrapper.clientWidth - 350, 650);
+        }
+        const colWidth = timelineWidth / currentMaxWeeks;
+        // Text width is approx 14px (for two digits at 11px). +8px buffer = 22px.
+        const isNarrow = colWidth < 22; 
+
+        // Build X-Axis Labels
+        for (let i = 1; i <= currentMaxWeeks; i++) { 
+            const percentage = ((i - 1) / currentMaxWeeks) * 100;
             const cell = document.createElement('div');
             cell.className = 'timeline-header-cell';
+            if (isNarrow) cell.classList.add('vertical-text');
             cell.style.left = `${percentage}%`;
-            // Add leading zero if single digit
-            cell.innerText = i < 10 ? `0${i}` : `${i}`;
+            
+            if (projectStartDate) {
+                // If a start date is set, map absolute date
+                const date = new Date(projectStartDate);
+                date.setDate(date.getDate() + (i - 1) * 7);
+                cell.innerText = `${date.getMonth() + 1}/${date.getDate()}`;
+            } else {
+                // Otherwise fall back to week integers
+                cell.innerText = i < 10 ? `0${i}` : `${i}`; 
+            }
+            
             header.appendChild(cell);
         }
 
-        let prevWbsInt = null;
-
-        // Build Gantt Rows and Bars
+        // Build Gantt Rows
         tasks.forEach(task => {
             const row = document.createElement('div');
             row.className = 'gantt-row';
 
-            // Breakline Logic
-            const currentWbsInt = parseInt(task.wbs.split('.')[0]);
-            if (!isNaN(currentWbsInt) && prevWbsInt !== null && currentWbsInt !== prevWbsInt) {
-                row.classList.add('section-break');
-            }
-            if (!isNaN(currentWbsInt)) prevWbsInt = currentWbsInt;
+            const wbsStr = task.wbs.toString().trim();
+            const isMajorSection = wbsStr.endsWith('.0') || !wbsStr.includes('.');
             
-            // Sub-section Logic
-            const isSub = task.wbs.includes('.') && !task.wbs.endsWith('.0');
-            const titleClass = isSub ? 'indent-text' : '';
+            if (isMajorSection) {
+                row.classList.add('major-section');
+            }
 
-            // Left side labels
             const labels = document.createElement('div');
             labels.className = 'gantt-labels';
+            
+            const titleClass = isMajorSection ? 'label-title' : 'label-title indented-title';
+
             labels.innerHTML = `
                 <div class="label-wbs">${task.wbs}</div>
-                <div class="label-title ${titleClass}" title="${task.title}">${task.title}</div>
-                <div class="label-owner">${task.owner}</div>
+                <div class="${titleClass}" title="${task.title}">${task.title}</div>
+                <div class="label-owner" title="${task.owner}">${task.owner}</div>
             `;
             row.appendChild(labels);
 
             // Right side timeline and bar
             const timeline = document.createElement('div');
             timeline.className = 'gantt-timeline';
+            timeline.style.backgroundSize = `calc(100% / ${currentMaxWeeks}) 100%`;
 
-            const startPercent = ((task.start - 1) / MAX_WEEKS) * 100;
+            const startPercent = ((task.start - 1) / currentMaxWeeks) * 100;
             
             if (task.duration === 0) {
                 const milestone = document.createElement('div');
@@ -492,7 +457,7 @@
                 milestone.style.left = `${startPercent}%`;
                 timeline.appendChild(milestone);
             } else {
-                const widthPercent = (task.duration / MAX_WEEKS) * 100;
+                const widthPercent = (task.duration / currentMaxWeeks) * 100;
                 const bar = document.createElement('div');
                 bar.className = 'gantt-bar';
                 bar.style.left = `${startPercent}%`;
@@ -504,6 +469,37 @@
             row.appendChild(timeline);
             chartBody.appendChild(row);
         });
+
+        // Update markers after chart renders
+        updateMarkers();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+        
+        if (tasks.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">No tasks. <button class="btn-import" onclick="addEmptyTask()" style="margin-left: 10px;">Add New Task</button></td></tr>`;
+            return;
+        }
+
+        tasks.forEach((task, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" value="${task.wbs}" onblur="handleWbsChange(${index}, this.value)"></td>
+                <td><input type="text" value="${task.title}" oninput="updateTask(${index}, 'title', this.value)"></td>
+                <td><input type="text" value="${task.owner}" oninput="updateTask(${index}, 'owner', this.value)"></td>
+                <td><input type="number" step="0.1" min="1" value="${task.start}" oninput="updateTask(${index}, 'start', parseFloat(this.value) || 1)"></td>
+                <td><input type="number" step="0.1" min="0" value="${task.duration}" oninput="updateTask(${index}, 'duration', parseFloat(this.value) || 0)"></td>
+                <td class="actions-cell">
+                    <button class="btn-add-inline" onclick="openMenu(event, ${index})" title="Add Row Here">+</button>
+                    <button class="btn-action" onclick="moveTask(${index}, -1)" title="Move Up">↑</button>
+                    <button class="btn-action" onclick="moveTask(${index}, 1)" title="Move Down">↓</button>
+                    <button class="btn-delete" onclick="deleteTask(${index})" title="Delete">✕</button>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
     }
 
     function renderAll() {
@@ -511,30 +507,139 @@
         renderChart();
     }
 
+    function openMenu(e, index) {
+        e.stopPropagation();
+        activeRowIndex = index;
+        const menu = document.getElementById('popup-menu');
+        const targetWbs = tasks[index].wbs || 'row';
+        
+        document.getElementById('menu-above').innerText = `Add row above ${targetWbs}`;
+        document.getElementById('menu-below').innerText = `Add row below ${targetWbs}`;
+        
+        menu.style.display = 'block';
+        
+        // Ensure menu stays within bounds
+        let posX = e.pageX;
+        let posY = e.pageY;
+        
+        // rough boundary checks
+        if(window.innerWidth - posX < 160) posX -= 160;
+        
+        menu.style.left = posX + 'px';
+        menu.style.top = posY + 'px';
+    }
+
+    function closeMenu() {
+        document.getElementById('popup-menu').style.display = 'none';
+    }
+
+    // Close popup if clicking outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.popup-menu') && !e.target.closest('.btn-add-inline')) {
+            closeMenu();
+        }
+    });
+
+    function addEmptyTask() {
+        tasks.push({ wbs: '1.0', title: '', owner: '', start: 1, duration: 1 });
+        renderAll();
+    }
+
+    function executeAdd(position) {
+        if (activeRowIndex === -1) return;
+        
+        const targetTask = tasks[activeRowIndex];
+        const wbsStr = (targetTask.wbs || '').toString().trim();
+        
+        let major = parseInt(wbsStr) || 1;
+        let minor = 0;
+        if (wbsStr.includes('.')) {
+            const parsed = parseInt(wbsStr.split('.')[1]);
+            if (!isNaN(parsed)) minor = parsed;
+        }
+
+        let newWbs = '';
+        let insertIndex = activeRowIndex;
+        let newStart = targetTask.start;
+
+        if (position === 'above') {
+            newWbs = `${major}.${minor}`;
+            insertIndex = activeRowIndex;
+            shiftMinorWBS(activeRowIndex, major, 1);
+        } else {
+            newWbs = `${major}.${minor + 1}`;
+            insertIndex = activeRowIndex + 1;
+            newStart = targetTask.start + targetTask.duration;
+            shiftMinorWBS(activeRowIndex + 1, major, 1);
+        }
+
+        const newTask = {
+            wbs: newWbs,
+            title: '',
+            owner: '',
+            start: newStart,
+            duration: 1
+        };
+
+        tasks.splice(insertIndex, 0, newTask);
+        closeMenu();
+        renderAll();
+    }
+
+    function shiftMinorWBS(startIndex, targetMajor, shiftAmount) {
+        for (let i = startIndex; i < tasks.length; i++) {
+            const wbsStr = (tasks[i].wbs || '').toString().trim();
+            const major = parseInt(wbsStr);
+            
+            if (major === targetMajor) {
+                if (wbsStr.includes('.')) {
+                    let minor = parseInt(wbsStr.split('.')[1]);
+                    if(isNaN(minor)) minor = 0;
+                    tasks[i].wbs = `${major}.${minor + shiftAmount}`;
+                } else {
+                    tasks[i].wbs = `${major}.${shiftAmount}`;
+                }
+            } else if (!isNaN(major)) {
+                // If we reach a different integer branch, stop cascading to prevent altering unrelated sections
+                break;
+            }
+        }
+    }
+
+    function handleWbsChange(index, value) {
+        if (/^\d+\.?$/.test(value)) {
+            let baseInt = parseInt(value);
+            let nextWbs = `${baseInt}.0`;
+
+            if (index > 0) {
+                const prevWbs = tasks[index - 1].wbs.toString();
+                const prevInt = parseInt(prevWbs);
+                if (prevInt === baseInt && prevWbs.includes('.')) {
+                    const parts = prevWbs.split('.');
+                    if (parts.length === 2) {
+                        const nextDec = parseInt(parts[1]) + 1;
+                        nextWbs = `${baseInt}.${nextDec}`;
+                    }
+                }
+            }
+            tasks[index].wbs = nextWbs;
+            renderAll();
+        } else {
+            tasks[index].wbs = value;
+            renderChart();
+        }
+    }
+
     function updateTask(index, field, value) {
         tasks[index][field] = value;
         renderChart(); 
     }
 
-    function addTaskToEnd() {
-        let maxStart = 1;
-        if(tasks.length > 0) {
-            const lastTask = tasks[tasks.length - 1];
-            maxStart = lastTask.start + lastTask.duration;
-        }
-        tasks.push({ wbs: '', title: '', owner: '', start: maxStart, duration: 2 });
-        renderAll();
-        window.scrollTo(0, document.body.scrollHeight);
-    }
-
-    function insertTask(index) {
-        let newStart = 1;
-        if (tasks[index]) {
-            newStart = tasks[index].start;
-        } else if (index > 0 && tasks[index - 1]) {
-            newStart = tasks[index - 1].start + tasks[index - 1].duration;
-        }
-        tasks.splice(index, 0, { wbs: '', title: '', owner: '', start: newStart, duration: 2 });
+    function moveTask(index, direction) {
+        if (index + direction < 0 || index + direction >= tasks.length) return;
+        const temp = tasks[index];
+        tasks[index] = tasks[index + direction];
+        tasks[index + direction] = temp;
         renderAll();
     }
 
@@ -544,42 +649,205 @@
     }
 
     function exportCSV() {
-        if(tasks.length === 0) {
-            alert("No data to export!");
+        let csvContent = "Task No.,Task Title,Owner,Start (Week),Duration (Weeks)\n";
+        tasks.forEach(t => {
+            let safeTitle = (t.title || '').replace(/"/g, '""');
+            let safeOwner = (t.owner || '').replace(/"/g, '""');
+            csvContent += `"${t.wbs}","${safeTitle}","${safeOwner}",${t.start},${t.duration}\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "project_schedule.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (file) processFile(file);
+    }
+
+    function processFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const content = e.target.result;
+            const lines = content.split(/\r?\n/).filter(line => line.trim() !== '');
+            if(lines.length > 1) {
+                let newTasks = [];
+                for(let i = 1; i < lines.length; i++) {
+                    let row = [];
+                    let inQuotes = false;
+                    let currentVal = '';
+                    for(let char of lines[i]) {
+                        if (char === '"') inQuotes = !inQuotes;
+                        else if (char === ',' && !inQuotes) { row.push(currentVal); currentVal = ''; }
+                        else currentVal += char;
+                    }
+                    row.push(currentVal);
+                    
+                    if(row.length >= 5) {
+                        newTasks.push({
+                            wbs: row[0].trim(),
+                            title: row[1].trim(),
+                            owner: row[2].trim(),
+                            start: parseFloat(row[3]) || 1,
+                            duration: parseFloat(row[4]) || 0
+                        });
+                    }
+                }
+                if(newTasks.length > 0) {
+                    tasks = newTasks;
+                    renderAll();
+                }
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    const overlay = document.getElementById('drop-overlay');
+    window.addEventListener('dragover', (e) => { e.preventDefault(); overlay.style.display = 'flex'; });
+    window.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        if (e.clientX === 0 || e.clientY === 0) overlay.style.display = 'none';
+    });
+    window.addEventListener('drop', (e) => {
+        e.preventDefault();
+        overlay.style.display = 'none';
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]);
+    });
+
+    // --- TIMELINE TRACKER AND STATUS LOGIC --- //
+
+    function handleStartDateChange() {
+        const val = document.getElementById('start-date').value;
+        if (val) {
+            // Split natively to avoid timezone offset shifts in Javascript parsing
+            const [year, month, day] = val.split('-');
+            projectStartDate = new Date(year, month - 1, day);
+            progressWeek = calculateTodayWeek(); 
+            document.getElementById('marker-progress').style.display = 'block';
+        } else {
+            projectStartDate = null;
+            document.getElementById('marker-progress').style.display = 'none';
+        }
+        renderChart();
+    }
+
+    function calculateTodayWeek() {
+        if (!projectStartDate) return 1;
+        const today = new Date();
+        const diffTime = today.getTime() - projectStartDate.getTime();
+        // Convert ms difference to weeks
+        const diffWeeks = diffTime / (1000 * 60 * 60 * 24 * 7);
+        // Minimum week is 1
+        return Math.max(1, 1 + diffWeeks);
+    }
+
+    function updateMarkers() {
+        const todayMarker = document.getElementById('marker-today');
+        const progressMarker = document.getElementById('marker-progress');
+        const currentMaxWeeks = getMaxWeeks();
+        const timelineLeftOffset = 350; // The fixed width of the left-hand text labels
+        
+        if (projectStartDate) {
+            todayMarker.style.display = 'block';
+            const todayWk = calculateTodayWeek();
+            const todayPercent = ((todayWk - 1) / currentMaxWeeks) * 100;
+            todayMarker.style.left = `calc(${timelineLeftOffset}px + ${todayPercent}%)`;
+            
+            // Hide the today marker if it's way out of bounds
+            if (todayWk > currentMaxWeeks || todayWk < 1) todayMarker.style.display = 'none';
+        } else {
+            todayMarker.style.display = 'none';
+        }
+
+        const progPercent = ((progressWeek - 1) / currentMaxWeeks) * 100;
+        progressMarker.style.left = `calc(${timelineLeftOffset}px + ${progPercent}%)`;
+        
+        updateStatus();
+    }
+
+    // Drag events for yellow progress marker
+    function startDrag(e) {
+        if (!projectStartDate) return; // Prevent drag if no date is set
+        isDraggingProgress = true;
+        document.addEventListener('mousemove', onDrag);
+        document.addEventListener('mouseup', stopDrag);
+    }
+
+    function onDrag(e) {
+        if (!isDraggingProgress) return;
+        
+        // Find the active timeline bounding box so dragging aligns with the CSS scaling 
+        const timelineEls = document.querySelectorAll('.gantt-timeline');
+        if (timelineEls.length === 0) return;
+        
+        const timelineRect = timelineEls[0].getBoundingClientRect();
+        let offsetX = e.clientX - timelineRect.left;
+        
+        // Clamp dragging bounds
+        if (offsetX < 0) offsetX = 0;
+        if (offsetX > timelineRect.width) offsetX = timelineRect.width;
+
+        const currentMaxWeeks = getMaxWeeks();
+        progressWeek = 1 + (offsetX / timelineRect.width) * currentMaxWeeks;
+        
+        updateMarkers();
+    }
+
+    function stopDrag(e) {
+        isDraggingProgress = false;
+        document.removeEventListener('mousemove', onDrag);
+        document.removeEventListener('mouseup', stopDrag);
+    }
+
+    function updateStatus() {
+        const statusBar = document.getElementById('status-bar');
+        if (!projectStartDate) {
+            statusBar.innerText = "Status: Set a project start date to enable progress tracking.";
+            statusBar.style.borderLeftColor = "var(--primary-color)";
             return;
         }
 
-        const headers = ['WBS', 'Task Title', 'Owner', 'Start (Week)', 'Duration (Weeks)', 'End (Week)'];
+        const todayWk = calculateTodayWeek();
+        // Locate tasks happening right at the yellow tracker
+        const activeTasks = tasks.filter(t => t.start <= progressWeek && (t.start + t.duration) >= progressWeek);
         
-        const csvRows = tasks.map(t => {
-            const endWeek = t.start + t.duration;
-            return [
-                `"${(t.wbs || '').toString().replace(/"/g, '""')}"`,
-                `"${(t.title || '').toString().replace(/"/g, '""')}"`,
-                `"${(t.owner || '').toString().replace(/"/g, '""')}"`,
-                t.start,
-                t.duration,
-                endWeek
-            ].join(',');
-        });
+        let statusText = "";
+        let diffWeeks = progressWeek - todayWk;
         
-        const csvContent = [headers.join(','), ...csvRows].join('\n');
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        
-        if (navigator.msSaveBlob) { 
-            navigator.msSaveBlob(blob, 'wbs_schedule.csv');
+        if (Math.abs(diffWeeks) < 0.2) {
+            statusText = "Project is on schedule. ";
+            statusBar.style.borderLeftColor = "#10b981"; // green
+        } else if (diffWeeks > 0) {
+            statusText = `Project is ahead of schedule by ${Math.abs(diffWeeks).toFixed(1)} weeks! `;
+            statusBar.style.borderLeftColor = "#3b82f6"; // blue
         } else {
-            link.href = URL.createObjectURL(blob);
-            link.download = 'wbs_schedule.csv';
-            link.style.display = 'none';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            statusText = `Project is behind schedule by ${Math.abs(diffWeeks).toFixed(1)} weeks. `;
+            statusBar.style.borderLeftColor = "#ef4444"; // red
         }
+
+        if (activeTasks.length > 0) {
+            const taskNames = activeTasks.map(t => t.title).join(", ");
+            statusText += `Current phase(s) indicated: ${taskNames}.`;
+            if (diffWeeks < -0.2) {
+                statusText += " Delays here will push back subsequent dependent phases.";
+            }
+        } else {
+            statusText += "No active tasks at the current marker position.";
+        }
+
+        statusBar.innerText = statusText;
     }
 
-    // Execute on initial load (will be empty)
+    // Re-render the chart dynamically if the user resizes the browser window
+    window.addEventListener('resize', renderChart);
+
     renderAll();
 </script>
 
