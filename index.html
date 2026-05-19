@@ -367,7 +367,7 @@
     // NEW TRACKING VARIABLES
     let projectStartDate = null;
     let isDraggingProgress = false;
-    let progressWeek = 1;
+    let progressWeek = 0;
 
     function getMaxWeeks() {
         let max = 30; // Minimum default
@@ -400,8 +400,8 @@
         const isNarrow = colWidth < 22; 
 
         // Build X-Axis Labels
-        for (let i = 1; i <= currentMaxWeeks; i++) { 
-            const percentage = ((i - 1) / currentMaxWeeks) * 100;
+        for (let i = 0; i <= currentMaxWeeks; i++) { 
+            const percentage = (i / currentMaxWeeks) * 100;
             const cell = document.createElement('div');
             cell.className = 'timeline-header-cell';
             if (isNarrow) cell.classList.add('vertical-text');
@@ -410,7 +410,7 @@
             if (projectStartDate) {
                 // If a start date is set, map absolute date
                 const date = new Date(projectStartDate);
-                date.setDate(date.getDate() + (i - 1) * 7);
+                date.setDate(date.getDate() + i * 7);
                 cell.innerText = `${date.getMonth() + 1}/${date.getDate()}`;
             } else {
                 // Otherwise fall back to week integers
@@ -449,7 +449,7 @@
             timeline.className = 'gantt-timeline';
             timeline.style.backgroundSize = `calc(100% / ${currentMaxWeeks}) 100%`;
 
-            const startPercent = ((task.start - 1) / currentMaxWeeks) * 100;
+            const startPercent = (task.start / currentMaxWeeks) * 100;
             
             if (task.duration === 0) {
                 const milestone = document.createElement('div');
@@ -489,7 +489,7 @@
                 <td><input type="text" value="${task.wbs}" onblur="handleWbsChange(${index}, this.value)"></td>
                 <td><input type="text" value="${task.title}" oninput="updateTask(${index}, 'title', this.value)"></td>
                 <td><input type="text" value="${task.owner}" oninput="updateTask(${index}, 'owner', this.value)"></td>
-                <td><input type="number" step="0.1" min="1" value="${task.start}" oninput="updateTask(${index}, 'start', parseFloat(this.value) || 1)"></td>
+                <td><input type="number" step="0.1" min="0" value="${task.start}" oninput="updateTask(${index}, 'start', parseFloat(this.value) || 0)"></td>
                 <td><input type="number" step="0.1" min="0" value="${task.duration}" oninput="updateTask(${index}, 'duration', parseFloat(this.value) || 0)"></td>
                 <td class="actions-cell">
                     <button class="btn-add-inline" onclick="openMenu(event, ${index})" title="Add Row Here">+</button>
@@ -541,7 +541,7 @@
     });
 
     function addEmptyTask() {
-        tasks.push({ wbs: '1.0', title: '', owner: '', start: 1, duration: 1 });
+        tasks.push({ wbs: '1.0', title: '', owner: '', start: 0, duration: 1 });
         renderAll();
     }
 
@@ -695,7 +695,7 @@
                             wbs: row[0].trim(),
                             title: row[1].trim(),
                             owner: row[2].trim(),
-                            start: parseFloat(row[3]) || 1,
+                            start: parseFloat(row[3]) || 0,
                             duration: parseFloat(row[4]) || 0
                         });
                     }
@@ -739,13 +739,13 @@
     }
 
     function calculateTodayWeek() {
-        if (!projectStartDate) return 1;
+        if (!projectStartDate) return 0;
         const today = new Date();
         const diffTime = today.getTime() - projectStartDate.getTime();
         // Convert ms difference to weeks
         const diffWeeks = diffTime / (1000 * 60 * 60 * 24 * 7);
-        // Minimum week is 1
-        return Math.max(1, 1 + diffWeeks);
+        // Minimum week is 0
+        return Math.max(0, diffWeeks);
     }
 
     function updateMarkers() {
@@ -757,16 +757,16 @@
         if (projectStartDate) {
             todayMarker.style.display = 'block';
             const todayWk = calculateTodayWeek();
-            const todayPercent = ((todayWk - 1) / currentMaxWeeks) * 100;
+            const todayPercent = (todayWk / currentMaxWeeks) * 100;
             todayMarker.style.left = `calc(${timelineLeftOffset}px + ${todayPercent}%)`;
             
             // Hide the today marker if it's way out of bounds
-            if (todayWk > currentMaxWeeks || todayWk < 1) todayMarker.style.display = 'none';
+            if (todayWk > currentMaxWeeks || todayWk < 0) todayMarker.style.display = 'none';
         } else {
             todayMarker.style.display = 'none';
         }
 
-        const progPercent = ((progressWeek - 1) / currentMaxWeeks) * 100;
+        const progPercent = (progressWeek / currentMaxWeeks) * 100;
         progressMarker.style.left = `calc(${timelineLeftOffset}px + ${progPercent}%)`;
         
         updateStatus();
@@ -795,7 +795,7 @@
         if (offsetX > timelineRect.width) offsetX = timelineRect.width;
 
         const currentMaxWeeks = getMaxWeeks();
-        progressWeek = 1 + (offsetX / timelineRect.width) * currentMaxWeeks;
+        progressWeek = (offsetX / timelineRect.width) * currentMaxWeeks;
         
         updateMarkers();
     }
