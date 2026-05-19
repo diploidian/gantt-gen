@@ -80,7 +80,7 @@
             position: absolute;
             transform: translateX(-50%);
             font-size: 11px;
-            font-weight: bold;
+            font-weight: normal;
             bottom: 2px;
             transition: transform 0.2s ease;
         }
@@ -139,6 +139,7 @@
             font-weight: bold;
             overflow: hidden;
             white-space: nowrap;
+            transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1), width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .gantt-milestone {
@@ -148,6 +149,28 @@
             height: 14px;
             background-color: var(--milestone-color);
             transform: rotate(45deg) translateX(-50%);
+            transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .table-toggle-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            width: 100%;
+            text-align: left;
+            font-weight: 600;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .table-toggle-btn:hover {
+            background-color: #1d4ed8;
         }
 
         .table-container {
@@ -294,7 +317,7 @@
         @media print {
             @page { size: landscape; margin: 0.5cm; }
             body { margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-            .controls, .table-container, .popup-menu { display: none !important; }
+            .controls, .table-container, .table-toggle-btn, .popup-menu { display: none !important; }
             .chart-container { border: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
             .gantt-wrapper { min-width: 100% !important; padding: 0; }
             .gantt-row { page-break-inside: avoid; }
@@ -334,8 +357,13 @@
     Status: Awaiting project start date to enable progress tracking.
 </div>
 
+<button class="table-toggle-btn" onclick="toggleTable()">
+    <span>Data Editor</span>
+    <span id="toggle-icon">▼</span>
+</button>
+
 <!-- Table Bottom -->
-<div class="table-container">
+<div class="table-container" id="table-container">
     <table>
         <thead>
             <tr>
@@ -370,12 +398,12 @@
     let progressWeek = 0;
 
     function getMaxWeeks() {
-        let max = 30; // Minimum default
+        let max = 28; // Minimum default (28 + 2 buffer = 30)
         tasks.forEach(t => {
             const end = t.start + t.duration;
             if (end > max) max = Math.ceil(end); 
         });
-        return max;
+        return max + 2; // Always provide a 2-week blank buffer at the end
     }
 
     function renderChart() {
@@ -420,55 +448,76 @@
             header.appendChild(cell);
         }
 
-        // Build Gantt Rows
-        tasks.forEach(task => {
-            const row = document.createElement('div');
-            row.className = 'gantt-row';
+        // Build or Update Gantt Rows
+        tasks.forEach((task, index) => {
+            let row = chartBody.children[index];
+            
+            // If the DOM row doesn't exist yet for this index, create it
+            if (!row) {
+                row = document.createElement('div');
+                row.className = 'gantt-row';
+                row.innerHTML = `
+                    <div class="gantt-labels">
+                        <div class="label-wbs"></div>
+                        <div class="label-title"></div>
+                        <div class="label-owner"></div>
+                    </div>
+                    <div class="gantt-timeline">
+                        <div class="gantt-bar" style="display: none;"></div>
+                        <div class="gantt-milestone" style="display: none;"></div>
+                    </div>
+                `;
+                chartBody.appendChild(row);
+            }
 
-            const wbsStr = task.wbs.toString().trim();
+            const wbsStr = (task.wbs || '').toString().trim();
             const isMajorSection = wbsStr.endsWith('.0') || !wbsStr.includes('.');
             
             if (isMajorSection) {
                 row.classList.add('major-section');
+            } else {
+                row.classList.remove('major-section');
             }
 
-            const labels = document.createElement('div');
-            labels.className = 'gantt-labels';
+            // Update Labels
+            const labels = row.querySelector('.gantt-labels');
+            labels.querySelector('.label-wbs').innerText = task.wbs;
             
-            const titleClass = isMajorSection ? 'label-title' : 'label-title indented-title';
+            const titleDiv = labels.querySelector('.label-title');
+            titleDiv.innerText = task.title;
+            titleDiv.title = task.title;
+            titleDiv.className = isMajorSection ? 'label-title' : 'label-title indented-title';
+            
+            const ownerDiv = labels.querySelector('.label-owner');
+            ownerDiv.innerText = task.owner;
+            ownerDiv.title = task.owner;
 
-            labels.innerHTML = `
-                <div class="label-wbs">${task.wbs}</div>
-                <div class="${titleClass}" title="${task.title}">${task.title}</div>
-                <div class="label-owner" title="${task.owner}">${task.owner}</div>
-            `;
-            row.appendChild(labels);
-
-            // Right side timeline and bar
-            const timeline = document.createElement('div');
-            timeline.className = 'gantt-timeline';
+            // Update Timeline & Bars
+            const timeline = row.querySelector('.gantt-timeline');
             timeline.style.backgroundSize = `calc(100% / ${currentMaxWeeks}) 100%`;
 
             const startPercent = (task.start / currentMaxWeeks) * 100;
+            const bar = timeline.querySelector('.gantt-bar');
+            const milestone = timeline.querySelector('.gantt-milestone');
             
             if (task.duration === 0) {
-                const milestone = document.createElement('div');
-                milestone.className = 'gantt-milestone';
+                bar.style.display = 'none';
+                milestone.style.display = 'block';
                 milestone.style.left = `${startPercent}%`;
-                timeline.appendChild(milestone);
             } else {
+                milestone.style.display = 'none';
+                bar.style.display = 'flex';
                 const widthPercent = (task.duration / currentMaxWeeks) * 100;
-                const bar = document.createElement('div');
-                bar.className = 'gantt-bar';
                 bar.style.left = `${startPercent}%`;
                 bar.style.width = `${widthPercent}%`;
-                if (task.duration >= 2) bar.innerText = `${task.duration}`; 
-                timeline.appendChild(bar);
+                bar.innerText = task.duration >= 2 ? `${task.duration}` : ''; 
             }
-
-            row.appendChild(timeline);
-            chartBody.appendChild(row);
         });
+
+        // Clean up any extra trailing rows in the DOM if a task was deleted
+        while (chartBody.children.length > tasks.length) {
+            chartBody.removeChild(chartBody.lastChild);
+        }
 
         // Update markers after chart renders
         updateMarkers();
@@ -485,12 +534,21 @@
 
         tasks.forEach((task, index) => {
             const tr = document.createElement('tr');
+            
+            const wbsStr = (task.wbs || '').toString().trim();
+            const isParent = wbsStr.endsWith('.0') || !wbsStr.includes('.');
+            
+            // Lock duration input if it is a parent task
+            const durationInput = isParent 
+                ? `<input type="number" step="0.1" min="0" value="${task.duration}" readonly title="Parent duration is calculated automatically" style="background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed;">`
+                : `<input type="number" step="0.1" min="0" value="${task.duration}" onchange="updateNumeric(${index}, 'duration', parseFloat(this.value) || 0)">`;
+
             tr.innerHTML = `
                 <td><input type="text" value="${task.wbs}" onblur="handleWbsChange(${index}, this.value)"></td>
-                <td><input type="text" value="${task.title}" oninput="updateTask(${index}, 'title', this.value)"></td>
-                <td><input type="text" value="${task.owner}" oninput="updateTask(${index}, 'owner', this.value)"></td>
-                <td><input type="number" step="0.1" min="0" value="${task.start}" oninput="updateTask(${index}, 'start', parseFloat(this.value) || 0)"></td>
-                <td><input type="number" step="0.1" min="0" value="${task.duration}" oninput="updateTask(${index}, 'duration', parseFloat(this.value) || 0)"></td>
+                <td><input type="text" value="${task.title}" oninput="updateText(${index}, 'title', this.value)"></td>
+                <td><input type="text" value="${task.owner}" oninput="updateText(${index}, 'owner', this.value)"></td>
+                <td><input type="number" step="0.1" min="0" value="${task.start}" onchange="updateNumeric(${index}, 'start', parseFloat(this.value) || 0)"></td>
+                <td>${durationInput}</td>
                 <td class="actions-cell">
                     <button class="btn-add-inline" onclick="openMenu(event, ${index})" title="Add Row Here">+</button>
                     <button class="btn-action" onclick="moveTask(${index}, -1)" title="Move Up">↑</button>
@@ -630,9 +688,75 @@
         }
     }
 
-    function updateTask(index, field, value) {
+    function updateText(index, field, value) {
         tasks[index][field] = value;
-        renderChart(); 
+        renderChart(); // Live update chart without losing input focus
+    }
+
+    function updateNumeric(index, field, value) {
+        const target = tasks[index];
+        const oldStart = target.start;
+        
+        const wbsStr = (target.wbs || '').toString().trim();
+        const majorPhase = parseInt(wbsStr);
+        const isParent = wbsStr.endsWith('.0') || !wbsStr.includes('.');
+
+        // 1. Pre-calculate state before mutation to find true delta
+        const parentTask = tasks.find(t => {
+            const tWbs = (t.wbs || '').toString().trim();
+            return parseInt(tWbs) === majorPhase && (tWbs.endsWith('.0') || !tWbs.includes('.'));
+        });
+        
+        const subTasks = tasks.filter(t => {
+            const tWbs = (t.wbs || '').toString().trim();
+            return parseInt(tWbs) === majorPhase && t !== parentTask;
+        });
+
+        // Record the phase's ending week BEFORE we apply changes
+        const oldPhaseEnd = parentTask ? (parentTask.start + parentTask.duration) : (target.start + target.duration);
+
+        // 2. Apply the user's manual change
+        target[field] = value;
+
+        if (isNaN(majorPhase)) {
+            renderAll();
+            return;
+        }
+
+        const deltaStart = target.start - oldStart;
+
+        // 3. If user explicitly shifted a Parent's Start, shift all its children identically
+        if (isParent && field === 'start' && deltaStart !== 0) {
+            subTasks.forEach(t => {
+                t.start = Math.max(0, t.start + deltaStart);
+            });
+        }
+
+        // 4. Recalculate Parent Rollup based on children
+        if (parentTask && subTasks.length > 0) {
+            const minStart = Math.min(...subTasks.map(t => t.start));
+            const maxEnd = Math.max(...subTasks.map(t => t.start + t.duration));
+            
+            parentTask.start = minStart;
+            parentTask.duration = Math.max(0, maxEnd - minStart);
+        }
+
+        // 5. Calculate how much the overall phase end date moved
+        const newPhaseEnd = parentTask ? (parentTask.start + parentTask.duration) : (target.start + target.duration);
+        const phaseDeltaEnd = newPhaseEnd - oldPhaseEnd;
+
+        // 6. Cascade Phase Shift to all downstream tasks
+        if (phaseDeltaEnd !== 0) {
+            tasks.forEach(t => {
+                const tWbs = parseInt((t.wbs || '').toString());
+                if (!isNaN(tWbs) && tWbs > majorPhase) {
+                    t.start = Math.max(0, t.start + phaseDeltaEnd);
+                }
+            });
+        }
+
+        // 7. Re-render everything to update the input boxes with cascaded values
+        renderAll();
     }
 
     function moveTask(index, direction) {
@@ -649,7 +773,7 @@
     }
 
     function exportCSV() {
-        let csvContent = "Task No.,Task Title,Owner,Start (Week),Duration (Weeks)\n";
+        let csvContent = "WBS,Task Title,Owner,Start (Week),Duration (Weeks)\n";
         tasks.forEach(t => {
             let safeTitle = (t.title || '').replace(/"/g, '""');
             let safeOwner = (t.owner || '').replace(/"/g, '""');
@@ -847,6 +971,18 @@
 
     // Re-render the chart dynamically if the user resizes the browser window
     window.addEventListener('resize', renderChart);
+
+    function toggleTable() {
+        const tableContainer = document.getElementById('table-container');
+        const icon = document.getElementById('toggle-icon');
+        if (tableContainer.style.display === 'none') {
+            tableContainer.style.display = 'block';
+            icon.innerText = '▼';
+        } else {
+            tableContainer.style.display = 'none';
+            icon.innerText = '▶';
+        }
+    }
 
     renderAll();
 </script>
