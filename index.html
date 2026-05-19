@@ -103,6 +103,7 @@
         }
 
         .gantt-labels {
+            box-sizing: border-box;
             width: 350px;
             min-width: 350px;
             display: flex;
@@ -206,12 +207,25 @@
 
         input[type="number"] { width: 60px; }
 
+        .readonly-value {
+            display: flex;
+            align-items: center;
+            width: 60px;
+            padding: 3px 5px;
+            background-color: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 3px;
+            font-size: 11px;
+            height: 16px;
+            color: #64748b;
+            font-weight: 600;
+        }
+
         .actions-cell {
             white-space: nowrap;
             min-width: 100px;
         }
 
-        /* Uniformly sized action buttons to preserve row height */
         .actions-cell button {
             display: inline-flex;
             align-items: center;
@@ -256,7 +270,6 @@
             color: var(--primary-color);
         }
 
-        /* NEW PROGRESS TRACKING STYLES */
         .status-bar {
             margin: 15px 0;
             padding: 10px 15px;
@@ -267,8 +280,16 @@
             font-weight: 500;
         }
 
-        .chart-relative-wrapper {
-            position: relative;
+        .chart-relative-wrapper { position: relative; }
+
+        .gantt-timeline-overlay {
+            position: absolute;
+            top: 10px;
+            bottom: 10px;
+            left: 360px;
+            right: 10px;
+            pointer-events: none;
+            z-index: 5;
         }
 
         .timeline-marker {
@@ -276,13 +297,11 @@
             top: 0;
             bottom: 0;
             width: 2px;
-            z-index: 10;
         }
 
         .marker-today {
             background-color: #10b981;
-            pointer-events: none;
-            display: none; /* Hidden until date is set */
+            display: none;
         }
 
         .marker-today::before {
@@ -299,7 +318,8 @@
         .marker-progress {
             background-color: #eab308;
             cursor: ew-resize;
-            display: none; /* Hidden until date is set */
+            display: none;
+            pointer-events: auto;
         }
 
         .marker-progress::before {
@@ -314,12 +334,31 @@
             border-top: 12px solid #eab308;
         }
 
+        .milestone-drop-line {
+            position: absolute;
+            width: 2px;
+            background-color: black;
+            pointer-events: none; 
+        }
+
+        .milestone-drop-line::after {
+            content: '';
+            position: absolute;
+            bottom: -4px; 
+            left: -3px; 
+            width: 8px;
+            height: 8px;
+            background-color: black;
+            border-radius: 50%;
+        }
+
         @media print {
             @page { size: landscape; margin: 0.5cm; }
             body { margin: 0; padding: 0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
             .controls, .table-container, .table-toggle-btn, .popup-menu { display: none !important; }
             .chart-container { border: none !important; overflow: visible !important; padding: 0 !important; margin: 0 !important; }
             .gantt-wrapper { min-width: 100% !important; padding: 0; }
+            .gantt-timeline-overlay { left: 350px !important; top: 0 !important; bottom: 0 !important; }
             .gantt-row { page-break-inside: avoid; }
         }
     </style>
@@ -340,19 +379,17 @@
     <button class="btn-print" onclick="window.print()">Print to PDF</button>
 </div>
 
-<!-- Gantt Chart Top -->
 <div class="chart-container">
     <div class="gantt-wrapper chart-relative-wrapper" id="gantt-wrapper">
-        <!-- New Progress Markers -->
-        <div id="marker-today" class="timeline-marker marker-today"></div>
-        <div id="marker-progress" class="timeline-marker marker-progress" onmousedown="startDrag(event)"></div>
-        
         <div id="timeline-header" class="timeline-header"></div>
         <div id="chart-body"></div>
+        <div id="gantt-timeline-overlay" class="gantt-timeline-overlay">
+            <div id="marker-today" class="timeline-marker marker-today"></div>
+            <div id="marker-progress" class="timeline-marker marker-progress" onmousedown="startDrag(event)"></div>
+        </div>
     </div>
 </div>
 
-<!-- New Status Bar -->
 <div id="status-bar" class="status-bar">
     Status: Awaiting project start date to enable progress tracking.
 </div>
@@ -362,24 +399,23 @@
     <span id="toggle-icon">▼</span>
 </button>
 
-<!-- Table Bottom -->
 <div class="table-container" id="table-container">
     <table>
         <thead>
             <tr>
-                <th>Task No.</th>
-                <th>Task Title</th>
-                <th>Owner</th>
-                <th>Start</th>
-                <th>Duration</th>
-                <th>Actions</th>
+                <th style="width: 8%;">WBS</th>
+                <th style="width: 30%;">Task Title</th>
+                <th style="width: 15%;">Owner</th>
+                <th style="width: 10%;">Duration</th>
+                <th style="width: 15%;">Predecessors</th>
+                <th style="width: 10%;">Start (Calc)</th>
+                <th style="width: 12%;">Actions</th>
             </tr>
         </thead>
         <tbody id="table-body"></tbody>
     </table>
 </div>
 
-<!-- Context Menu for Row Insertion -->
 <div id="popup-menu" class="popup-menu">
     <div class="popup-item" onclick="executeAdd('above')" id="menu-above">Add row above</div>
     <div class="popup-item" onclick="executeAdd('below')" id="menu-below">Add row below</div>
@@ -387,23 +423,99 @@
 
 <script>
     let tasks = [
-        { wbs: '1.0', title: 'Task Title', owner: 'Responsible Party', start: 1, duration: 2 }
+        { wbs: '1', title: 'Phase 1', owner: 'Team', duration: 3, preds: [], start: 0 },
+        { wbs: '1.01', title: 'First Task', owner: 'Arch', duration: 1, preds: [], start: 0 },
+        { wbs: '1.02', title: 'Second Task', owner: 'Civil', duration: 2, preds: ['1.01'], start: 1 }
     ];
 
-    let activeRowIndex = -1; // Stores which row was targeted by the popup menu
-    
-    // NEW TRACKING VARIABLES
+    let activeRowIndex = -1; 
     let projectStartDate = null;
     let isDraggingProgress = false;
     let progressWeek = 0;
 
-    function getMaxWeeks() {
-        let max = 28; // Minimum default (28 + 2 buffer = 30)
+    // Determines if a task ID acts as a parent (e.g. '1' is parent if '1.01' exists)
+    function isTaskParent(wbsStr) {
+        const str = String(wbsStr).trim();
+        const major = parseInt(str);
+        const isIntegerFormat = /^\d+(\.0+)?$/.test(str);
+        const hasChildren = tasks.some(t => {
+            const tStr = String(t.wbs).trim();
+            return tStr !== str && parseInt(tStr) === major && tStr.startsWith(major + '.');
+        });
+        return isIntegerFormat && hasChildren;
+    }
+
+    // Topological sort and dynamic predecessor calculation
+    function calculateSchedule() {
+        tasks.forEach(t => { t.computedStart = null; t.computedEnd = null; });
+
+        function getEnd(wbs, visited = new Set()) {
+            const wbsStr = String(wbs).trim();
+            if (visited.has(wbsStr)) return 0; // Prevent infinite loops from circular dependencies
+            
+            const task = tasks.find(t => String(t.wbs).trim() === wbsStr);
+            if (!task) return 0;
+            if (task.computedEnd !== null) return task.computedEnd;
+
+            visited.add(wbsStr);
+            let start = 0;
+            if (task.preds && task.preds.length > 0) {
+                start = Math.max(...task.preds.map(p => getEnd(p, new Set(visited))));
+            }
+            
+            task.computedStart = start;
+            task.computedEnd = start + (parseFloat(task.duration) || 0);
+            return task.computedEnd;
+        }
+
+        // 1. Calculate all child tasks first
         tasks.forEach(t => {
-            const end = t.start + t.duration;
+            if (!isTaskParent(t.wbs)) getEnd(t.wbs);
+        });
+
+        // 2. Roll up child calculations to determine parent durations
+        tasks.forEach(t => {
+            const wbsStr = String(t.wbs).trim();
+            if (isTaskParent(wbsStr)) {
+                const major = parseInt(wbsStr);
+                const children = tasks.filter(c => {
+                    const cStr = String(c.wbs).trim();
+                    return cStr !== wbsStr && parseInt(cStr) === major;
+                });
+
+                if (children.length > 0) {
+                    t.computedStart = Math.min(...children.map(c => c.computedStart !== null ? c.computedStart : 0));
+                    t.computedEnd = Math.max(...children.map(c => c.computedEnd !== null ? c.computedEnd : 0));
+                    t.duration = t.computedEnd - t.computedStart;
+                } else {
+                    t.computedStart = 0;
+                    t.computedEnd = parseFloat(t.duration) || 0;
+                }
+            }
+        });
+
+        // 3. Finalize data
+        tasks.forEach(t => {
+            t.start = t.computedStart || 0;
+        });
+    }
+
+    // Renames all predecessor links when a WBS is modified
+    function renameWBS(oldWbs, newWbs) {
+        tasks.forEach(t => {
+            if (t.preds) {
+                t.preds = t.preds.map(p => String(p).trim() === String(oldWbs).trim() ? newWbs : p);
+            }
+        });
+    }
+
+    function getMaxWeeks() {
+        let max = 28; 
+        tasks.forEach(t => {
+            const end = t.start + (parseFloat(t.duration) || 0);
             if (end > max) max = Math.ceil(end); 
         });
-        return max + 2; // Always provide a 2-week blank buffer at the end
+        return max + 2; 
     }
 
     function renderChart() {
@@ -413,21 +525,21 @@
         header.innerHTML = '';
         chartBody.innerHTML = '';
 
-        if (tasks.length === 0) return;
+        if (tasks.length === 0) {
+            document.getElementById('gantt-timeline-overlay').querySelectorAll('.milestone-drop-line').forEach(e => e.remove());
+            return;
+        }
 
         const currentMaxWeeks = getMaxWeeks();
 
-        // Calculate column width to determine if text should be vertical
         let timelineWidth = header.clientWidth;
         if (!timelineWidth) {
             const wrapper = document.querySelector('.gantt-wrapper');
             timelineWidth = Math.max(wrapper.clientWidth - 350, 650);
         }
         const colWidth = timelineWidth / currentMaxWeeks;
-        // Text width is approx 14px (for two digits at 11px). +8px buffer = 22px.
         const isNarrow = colWidth < 22; 
 
-        // Build X-Axis Labels
         for (let i = 0; i <= currentMaxWeeks; i++) { 
             const percentage = (i / currentMaxWeeks) * 100;
             const cell = document.createElement('div');
@@ -436,23 +548,17 @@
             cell.style.left = `${percentage}%`;
             
             if (projectStartDate) {
-                // If a start date is set, map absolute date
                 const date = new Date(projectStartDate);
                 date.setDate(date.getDate() + i * 7);
                 cell.innerText = `${date.getMonth() + 1}/${date.getDate()}`;
             } else {
-                // Otherwise fall back to week integers
                 cell.innerText = i < 10 ? `0${i}` : `${i}`; 
             }
-            
             header.appendChild(cell);
         }
 
-        // Build or Update Gantt Rows
         tasks.forEach((task, index) => {
             let row = chartBody.children[index];
-            
-            // If the DOM row doesn't exist yet for this index, create it
             if (!row) {
                 row = document.createElement('div');
                 row.className = 'gantt-row';
@@ -469,30 +575,37 @@
                 `;
                 chartBody.appendChild(row);
             }
+const isParent = isTaskParent(task.wbs);
+            // Check if the WBS is an integer format (e.g., '6' or '6.00') independent of children
+            const isMajorPhase = /^\d+(\.0+)?$/.test(String(task.wbs).trim());
 
-            const wbsStr = (task.wbs || '').toString().trim();
-            const isMajorSection = wbsStr.endsWith('.0') || !wbsStr.includes('.');
-            
-            if (isMajorSection) {
-                row.classList.add('major-section');
-            } else {
-                row.classList.remove('major-section');
-            }
+            if (isMajorPhase) row.classList.add('major-section');
+            else row.classList.remove('major-section');
 
-            // Update Labels
             const labels = row.querySelector('.gantt-labels');
             labels.querySelector('.label-wbs').innerText = task.wbs;
             
             const titleDiv = labels.querySelector('.label-title');
             titleDiv.innerText = task.title;
             titleDiv.title = task.title;
-            titleDiv.className = isMajorSection ? 'label-title' : 'label-title indented-title';
+            // Use isMajorPhase so childless sections don't get indented like subtasks
+            titleDiv.className = isMajorPhase ? 'label-title' : 'label-title indented-title';
+            <!-- const isParent = isTaskParent(task.wbs); -->
+            <!-- if (isParent) row.classList.add('major-section'); -->
+            <!-- else row.classList.remove('major-section'); -->
+
+            <!-- const labels = row.querySelector('.gantt-labels'); -->
+            <!-- labels.querySelector('.label-wbs').innerText = task.wbs; -->
+            
+            <!-- const titleDiv = labels.querySelector('.label-title'); -->
+            <!-- titleDiv.innerText = task.title; -->
+            <!-- titleDiv.title = task.title; -->
+            <!-- titleDiv.className = isParent ? 'label-title' : 'label-title indented-title'; -->
             
             const ownerDiv = labels.querySelector('.label-owner');
             ownerDiv.innerText = task.owner;
             ownerDiv.title = task.owner;
 
-            // Update Timeline & Bars
             const timeline = row.querySelector('.gantt-timeline');
             timeline.style.backgroundSize = `calc(100% / ${currentMaxWeeks}) 100%`;
 
@@ -500,7 +613,7 @@
             const bar = timeline.querySelector('.gantt-bar');
             const milestone = timeline.querySelector('.gantt-milestone');
             
-            if (task.duration === 0) {
+            if (parseFloat(task.duration) === 0) {
                 bar.style.display = 'none';
                 milestone.style.display = 'block';
                 milestone.style.left = `${startPercent}%`;
@@ -510,17 +623,47 @@
                 const widthPercent = (task.duration / currentMaxWeeks) * 100;
                 bar.style.left = `${startPercent}%`;
                 bar.style.width = `${widthPercent}%`;
-                bar.innerText = task.duration >= 2 ? `${task.duration}` : ''; 
+                bar.innerText = task.duration >= 1 ? `${parseFloat(task.duration).toFixed(1)}` : ''; 
             }
         });
 
-        // Clean up any extra trailing rows in the DOM if a task was deleted
         while (chartBody.children.length > tasks.length) {
             chartBody.removeChild(chartBody.lastChild);
         }
 
-        // Update markers after chart renders
+        drawMilestoneLines(currentMaxWeeks);
         updateMarkers();
+    }
+
+    function drawMilestoneLines(currentMaxWeeks) {
+        const overlay = document.getElementById('gantt-timeline-overlay');
+        overlay.querySelectorAll('.milestone-drop-line').forEach(e => e.remove());
+        
+        const headerRect = document.getElementById('timeline-header').getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+        const chartBody = document.getElementById('chart-body');
+        
+        const lineTop = headerRect.bottom - overlayRect.top;
+
+        tasks.forEach((task, index) => {
+            if (task.title && task.title.includes('*')) {
+                const row = chartBody.children[index];
+                if (!row) return;
+
+                const startPercent = (task.start / currentMaxWeeks) * 100;
+                const rowRect = row.getBoundingClientRect();
+                
+                const line = document.createElement('div');
+                line.className = 'milestone-drop-line';
+                line.style.left = `${startPercent}%`;
+                line.style.top = `${lineTop}px`;
+                
+                const targetY = rowRect.bottom - overlayRect.top;
+                line.style.height = `${Math.max(0, targetY - lineTop)}px`;
+                
+                overlay.appendChild(line);
+            }
+        });
     }
 
     function renderTable() {
@@ -528,27 +671,29 @@
         tbody.innerHTML = '';
         
         if (tasks.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center;">No tasks. <button class="btn-import" onclick="addEmptyTask()" style="margin-left: 10px;">Add New Task</button></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center;">No tasks. <button class="btn-import" onclick="addEmptyTask()" style="margin-left: 10px;">Add New Task</button></td></tr>`;
             return;
         }
 
         tasks.forEach((task, index) => {
             const tr = document.createElement('tr');
+            const isParent = isTaskParent(task.wbs);
             
-            const wbsStr = (task.wbs || '').toString().trim();
-            const isParent = wbsStr.endsWith('.0') || !wbsStr.includes('.');
-            
-            // Lock duration input if it is a parent task
             const durationInput = isParent 
                 ? `<input type="number" step="0.1" min="0" value="${task.duration}" readonly title="Parent duration is calculated automatically" style="background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed;">`
-                : `<input type="number" step="0.1" min="0" value="${task.duration}" onchange="updateNumeric(${index}, 'duration', parseFloat(this.value) || 0)">`;
+                : `<input type="number" step="0.1" min="0" value="${task.duration}" onchange="updateDuration(${index}, this.value)">`;
+
+            const predsInput = isParent
+                ? `<input type="text" value="" readonly title="Parents do not have explicit predecessors" style="background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed;">`
+                : `<input type="text" value="${(task.preds || []).join('; ')}" onchange="updatePreds(${index}, this.value)" placeholder="e.g. 1.01; 1.02">`;
 
             tr.innerHTML = `
                 <td><input type="text" value="${task.wbs}" onblur="handleWbsChange(${index}, this.value)"></td>
                 <td><input type="text" value="${task.title}" oninput="updateText(${index}, 'title', this.value)"></td>
                 <td><input type="text" value="${task.owner}" oninput="updateText(${index}, 'owner', this.value)"></td>
-                <td><input type="number" step="0.1" min="0" value="${task.start}" onchange="updateNumeric(${index}, 'start', parseFloat(this.value) || 0)"></td>
                 <td>${durationInput}</td>
+                <td>${predsInput}</td>
+                <td><div class="readonly-value">${parseFloat(task.start).toFixed(1)}</div></td>
                 <td class="actions-cell">
                     <button class="btn-add-inline" onclick="openMenu(event, ${index})" title="Add Row Here">+</button>
                     <button class="btn-action" onclick="moveTask(${index}, -1)" title="Move Up">↑</button>
@@ -561,8 +706,9 @@
     }
 
     function renderAll() {
+        calculateSchedule(); // Always recalculate before rendering
         renderTable();
-        renderChart();
+        setTimeout(renderChart, 0); 
     }
 
     function openMenu(e, index) {
@@ -576,11 +722,8 @@
         
         menu.style.display = 'block';
         
-        // Ensure menu stays within bounds
         let posX = e.pageX;
         let posY = e.pageY;
-        
-        // rough boundary checks
         if(window.innerWidth - posX < 160) posX -= 160;
         
         menu.style.left = posX + 'px';
@@ -591,15 +734,12 @@
         document.getElementById('popup-menu').style.display = 'none';
     }
 
-    // Close popup if clicking outside
     document.addEventListener('click', function(e) {
-        if (!e.target.closest('.popup-menu') && !e.target.closest('.btn-add-inline')) {
-            closeMenu();
-        }
+        if (!e.target.closest('.popup-menu') && !e.target.closest('.btn-add-inline')) closeMenu();
     });
 
     function addEmptyTask() {
-        tasks.push({ wbs: '1.0', title: '', owner: '', start: 0, duration: 1 });
+        tasks.push({ wbs: '1', title: '', owner: '', duration: 1, preds: [] });
         renderAll();
     }
 
@@ -610,36 +750,25 @@
         const wbsStr = (targetTask.wbs || '').toString().trim();
         
         let major = parseInt(wbsStr) || 1;
-        let minor = 0;
-        if (wbsStr.includes('.')) {
-            const parsed = parseInt(wbsStr.split('.')[1]);
-            if (!isNaN(parsed)) minor = parsed;
-        }
+        let minorStr = wbsStr.includes('.') ? wbsStr.split('.')[1] : '00';
+        let padLength = Math.max(2, minorStr.length);
+        let minor = parseInt(minorStr);
+        if (isNaN(minor)) minor = 0;
 
         let newWbs = '';
         let insertIndex = activeRowIndex;
-        let newStart = targetTask.start;
 
         if (position === 'above') {
-            newWbs = `${major}.${minor}`;
+            newWbs = `${major}.${minor.toString().padStart(padLength, '0')}`;
             insertIndex = activeRowIndex;
             shiftMinorWBS(activeRowIndex, major, 1);
         } else {
-            newWbs = `${major}.${minor + 1}`;
+            newWbs = `${major}.${(minor + 1).toString().padStart(padLength, '0')}`;
             insertIndex = activeRowIndex + 1;
-            newStart = targetTask.start + targetTask.duration;
             shiftMinorWBS(activeRowIndex + 1, major, 1);
         }
 
-        const newTask = {
-            wbs: newWbs,
-            title: '',
-            owner: '',
-            start: newStart,
-            duration: 1
-        };
-
-        tasks.splice(insertIndex, 0, newTask);
+        tasks.splice(insertIndex, 0, { wbs: newWbs, title: '', owner: '', duration: 1, preds: [] });
         closeMenu();
         renderAll();
     }
@@ -651,111 +780,63 @@
             
             if (major === targetMajor) {
                 if (wbsStr.includes('.')) {
-                    let minor = parseInt(wbsStr.split('.')[1]);
+                    let minorStr = wbsStr.split('.')[1];
+                    let padLength = Math.max(2, minorStr.length);
+                    let minor = parseInt(minorStr);
                     if(isNaN(minor)) minor = 0;
-                    tasks[i].wbs = `${major}.${minor + shiftAmount}`;
+                    
+                    let newWbs = `${major}.${(minor + shiftAmount).toString().padStart(padLength, '0')}`;
+                    renameWBS(wbsStr, newWbs);
+                    tasks[i].wbs = newWbs;
                 } else {
-                    tasks[i].wbs = `${major}.${shiftAmount}`;
+                    let newWbs = `${major}.${shiftAmount.toString().padStart(2, '0')}`;
+                    renameWBS(wbsStr, newWbs);
+                    tasks[i].wbs = newWbs;
                 }
             } else if (!isNaN(major)) {
-                // If we reach a different integer branch, stop cascading to prevent altering unrelated sections
                 break;
             }
         }
     }
 
     function handleWbsChange(index, value) {
+        const oldWbs = tasks[index].wbs;
+        let nextWbs = value;
+
         if (/^\d+\.?$/.test(value)) {
             let baseInt = parseInt(value);
-            let nextWbs = `${baseInt}.0`;
-
+            nextWbs = `${baseInt}.00`;
             if (index > 0) {
                 const prevWbs = tasks[index - 1].wbs.toString();
                 const prevInt = parseInt(prevWbs);
                 if (prevInt === baseInt && prevWbs.includes('.')) {
                     const parts = prevWbs.split('.');
                     if (parts.length === 2) {
+                        const padLength = Math.max(2, parts[1].length);
                         const nextDec = parseInt(parts[1]) + 1;
-                        nextWbs = `${baseInt}.${nextDec}`;
+                        nextWbs = `${baseInt}.${nextDec.toString().padStart(padLength, '0')}`;
                     }
                 }
             }
-            tasks[index].wbs = nextWbs;
-            renderAll();
-        } else {
-            tasks[index].wbs = value;
-            renderChart();
         }
+        
+        tasks[index].wbs = nextWbs;
+        renameWBS(oldWbs, nextWbs);
+        renderAll();
     }
 
     function updateText(index, field, value) {
         tasks[index][field] = value;
-        renderChart(); // Live update chart without losing input focus
+        renderChart(); 
     }
 
-    function updateNumeric(index, field, value) {
-        const target = tasks[index];
-        const oldStart = target.start;
-        
-        const wbsStr = (target.wbs || '').toString().trim();
-        const majorPhase = parseInt(wbsStr);
-        const isParent = wbsStr.endsWith('.0') || !wbsStr.includes('.');
+    function updateDuration(index, value) {
+        tasks[index].duration = parseFloat(value) || 0;
+        renderAll(); // Will trigger calculation
+    }
 
-        // 1. Pre-calculate state before mutation to find true delta
-        const parentTask = tasks.find(t => {
-            const tWbs = (t.wbs || '').toString().trim();
-            return parseInt(tWbs) === majorPhase && (tWbs.endsWith('.0') || !tWbs.includes('.'));
-        });
-        
-        const subTasks = tasks.filter(t => {
-            const tWbs = (t.wbs || '').toString().trim();
-            return parseInt(tWbs) === majorPhase && t !== parentTask;
-        });
-
-        // Record the phase's ending week BEFORE we apply changes
-        const oldPhaseEnd = parentTask ? (parentTask.start + parentTask.duration) : (target.start + target.duration);
-
-        // 2. Apply the user's manual change
-        target[field] = value;
-
-        if (isNaN(majorPhase)) {
-            renderAll();
-            return;
-        }
-
-        const deltaStart = target.start - oldStart;
-
-        // 3. If user explicitly shifted a Parent's Start, shift all its children identically
-        if (isParent && field === 'start' && deltaStart !== 0) {
-            subTasks.forEach(t => {
-                t.start = Math.max(0, t.start + deltaStart);
-            });
-        }
-
-        // 4. Recalculate Parent Rollup based on children
-        if (parentTask && subTasks.length > 0) {
-            const minStart = Math.min(...subTasks.map(t => t.start));
-            const maxEnd = Math.max(...subTasks.map(t => t.start + t.duration));
-            
-            parentTask.start = minStart;
-            parentTask.duration = Math.max(0, maxEnd - minStart);
-        }
-
-        // 5. Calculate how much the overall phase end date moved
-        const newPhaseEnd = parentTask ? (parentTask.start + parentTask.duration) : (target.start + target.duration);
-        const phaseDeltaEnd = newPhaseEnd - oldPhaseEnd;
-
-        // 6. Cascade Phase Shift to all downstream tasks
-        if (phaseDeltaEnd !== 0) {
-            tasks.forEach(t => {
-                const tWbs = parseInt((t.wbs || '').toString());
-                if (!isNaN(tWbs) && tWbs > majorPhase) {
-                    t.start = Math.max(0, t.start + phaseDeltaEnd);
-                }
-            });
-        }
-
-        // 7. Re-render everything to update the input boxes with cascaded values
+    function updatePreds(index, value) {
+        tasks[index].preds = value.split(/[;,]/).map(s => s.trim()).filter(s => s);
         renderAll();
     }
 
@@ -773,11 +854,12 @@
     }
 
     function exportCSV() {
-        let csvContent = "WBS,Task Title,Owner,Start (Week),Duration (Weeks)\n";
+        let csvContent = "WBS,Task Title,Owner,Duration (Weeks),Predecessors\n";
         tasks.forEach(t => {
             let safeTitle = (t.title || '').replace(/"/g, '""');
             let safeOwner = (t.owner || '').replace(/"/g, '""');
-            csvContent += `"${t.wbs}","${safeTitle}","${safeOwner}",${t.start},${t.duration}\n`;
+            let predsStr = (t.preds || []).join(';');
+            csvContent += `"${t.wbs}","${safeTitle}","${safeOwner}",${t.duration},"${predsStr}"\n`;
         });
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -814,13 +896,13 @@
                     }
                     row.push(currentVal);
                     
-                    if(row.length >= 5) {
+                    if(row.length >= 4) {
                         newTasks.push({
                             wbs: row[0].trim(),
                             title: row[1].trim(),
                             owner: row[2].trim(),
-                            start: parseFloat(row[3]) || 0,
-                            duration: parseFloat(row[4]) || 0
+                            duration: parseFloat(row[3]) || 0,
+                            preds: (row[4] || '').split(/[;,]/).map(s => s.trim()).filter(s => s)
                         });
                     }
                 }
@@ -845,12 +927,9 @@
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processFile(e.dataTransfer.files[0]);
     });
 
-    // --- TIMELINE TRACKER AND STATUS LOGIC --- //
-
     function handleStartDateChange() {
         const val = document.getElementById('start-date').value;
         if (val) {
-            // Split natively to avoid timezone offset shifts in Javascript parsing
             const [year, month, day] = val.split('-');
             projectStartDate = new Date(year, month - 1, day);
             progressWeek = calculateTodayWeek(); 
@@ -866,9 +945,7 @@
         if (!projectStartDate) return 0;
         const today = new Date();
         const diffTime = today.getTime() - projectStartDate.getTime();
-        // Convert ms difference to weeks
         const diffWeeks = diffTime / (1000 * 60 * 60 * 24 * 7);
-        // Minimum week is 0
         return Math.max(0, diffWeeks);
     }
 
@@ -876,29 +953,26 @@
         const todayMarker = document.getElementById('marker-today');
         const progressMarker = document.getElementById('marker-progress');
         const currentMaxWeeks = getMaxWeeks();
-        const timelineLeftOffset = 350; // The fixed width of the left-hand text labels
         
         if (projectStartDate) {
             todayMarker.style.display = 'block';
             const todayWk = calculateTodayWeek();
             const todayPercent = (todayWk / currentMaxWeeks) * 100;
-            todayMarker.style.left = `calc(${timelineLeftOffset}px + ${todayPercent}%)`;
+            todayMarker.style.left = `${todayPercent}%`;
             
-            // Hide the today marker if it's way out of bounds
             if (todayWk > currentMaxWeeks || todayWk < 0) todayMarker.style.display = 'none';
         } else {
             todayMarker.style.display = 'none';
         }
 
         const progPercent = (progressWeek / currentMaxWeeks) * 100;
-        progressMarker.style.left = `calc(${timelineLeftOffset}px + ${progPercent}%)`;
+        progressMarker.style.left = `${progPercent}%`;
         
         updateStatus();
     }
 
-    // Drag events for yellow progress marker
     function startDrag(e) {
-        if (!projectStartDate) return; // Prevent drag if no date is set
+        if (!projectStartDate) return; 
         isDraggingProgress = true;
         document.addEventListener('mousemove', onDrag);
         document.addEventListener('mouseup', stopDrag);
@@ -906,21 +980,14 @@
 
     function onDrag(e) {
         if (!isDraggingProgress) return;
-        
-        // Find the active timeline bounding box so dragging aligns with the CSS scaling 
-        const timelineEls = document.querySelectorAll('.gantt-timeline');
-        if (timelineEls.length === 0) return;
-        
-        const timelineRect = timelineEls[0].getBoundingClientRect();
-        let offsetX = e.clientX - timelineRect.left;
-        
-        // Clamp dragging bounds
+        const overlay = document.getElementById('gantt-timeline-overlay');
+        const overlayRect = overlay.getBoundingClientRect();
+        let offsetX = e.clientX - overlayRect.left;
         if (offsetX < 0) offsetX = 0;
-        if (offsetX > timelineRect.width) offsetX = timelineRect.width;
+        if (offsetX > overlayRect.width) offsetX = overlayRect.width;
 
         const currentMaxWeeks = getMaxWeeks();
-        progressWeek = (offsetX / timelineRect.width) * currentMaxWeeks;
-        
+        progressWeek = (offsetX / overlayRect.width) * currentMaxWeeks;
         updateMarkers();
     }
 
@@ -939,7 +1006,6 @@
         }
 
         const todayWk = calculateTodayWeek();
-        // Locate tasks happening right at the yellow tracker
         const activeTasks = tasks.filter(t => t.start <= progressWeek && (t.start + t.duration) >= progressWeek);
         
         let statusText = "";
@@ -947,21 +1013,19 @@
         
         if (Math.abs(diffWeeks) < 0.2) {
             statusText = "Project is on schedule. ";
-            statusBar.style.borderLeftColor = "#10b981"; // green
+            statusBar.style.borderLeftColor = "#10b981"; 
         } else if (diffWeeks > 0) {
             statusText = `Project is ahead of schedule by ${Math.abs(diffWeeks).toFixed(1)} weeks! `;
-            statusBar.style.borderLeftColor = "#3b82f6"; // blue
+            statusBar.style.borderLeftColor = "#3b82f6"; 
         } else {
             statusText = `Project is behind schedule by ${Math.abs(diffWeeks).toFixed(1)} weeks. `;
-            statusBar.style.borderLeftColor = "#ef4444"; // red
+            statusBar.style.borderLeftColor = "#ef4444"; 
         }
 
         if (activeTasks.length > 0) {
             const taskNames = activeTasks.map(t => t.title).join(", ");
             statusText += `Current phase(s) indicated: ${taskNames}.`;
-            if (diffWeeks < -0.2) {
-                statusText += " Delays here will push back subsequent dependent phases.";
-            }
+            if (diffWeeks < -0.2) statusText += " Delays here will push back subsequent dependent phases.";
         } else {
             statusText += "No active tasks at the current marker position.";
         }
@@ -969,7 +1033,6 @@
         statusBar.innerText = statusText;
     }
 
-    // Re-render the chart dynamically if the user resizes the browser window
     window.addEventListener('resize', renderChart);
 
     function toggleTable() {
@@ -986,6 +1049,5 @@
 
     renderAll();
 </script>
-
 </body>
 </html>
